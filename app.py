@@ -8,82 +8,140 @@ st.set_page_config(
     page_icon="📄",
     layout="centered"
 )
-st.title("Pdf Text Extractor")
 
-upload_file = st.file_uploader("uploaded file :", type=["pdf"])
+parser_type = st.selectbox(
+    "Select parser type",
+    [
+        "Select Option",
+        "Normal PDF",
+        "Resume Parser",
+        "Bank Statement Parser",
+        "Invoice Parser"
+    ]
+)
 
-if upload_file:
+if parser_type == "Select Option":
+    st.warning("Please choose a parser type.")
+    st.stop()
 
-    file = ""
+st.title("PDF Text Extractor")
 
-    try:
-        with pdfplumber.open(upload_file) as pdf:
+upload_file = st.file_uploader("Upload file:", type=["pdf"])
+if not upload_file:
+    st.stop()
 
-            for page in pdf.pages:
+file_text = ""
+try:
+    with pdfplumber.open(upload_file) as pdf:
+        for page in pdf.pages:
+            page_text = page.extract_text()
+            if page_text:
+                file_text += page_text
+except Exception as exc:
+    st.error(f"Error reading PDF: {exc}")
+    st.stop()
 
-                text = page.extract_text()
+st.write("TEXT LENGTH:", len(file_text))
+if file_text:
+    st.text(file_text)
+else:
+    st.warning("No text could be extracted from this PDF.")
 
-                if text:
-                    file += text
-    except Exception:
-        st.error("Error Reading PDF")
-    else:
-        # st.subheader("pdf text")
-        # st.text(file)
+file_lower = file_text.lower()
+resume_keywords = ["skills", "education", "experience", "project", "resume"]
+bank_keywords = ["account number", "transaction", "balance", "debit", "credit"]
+invoice_keywords = ["invoice", "bill", "amount", "gst", "total"]
 
-        # ---------------- EMAIL ----------------
+if parser_type == "Resume Parser":
+    email = re.findall(
+        r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
+        file_text
+    )
+    phone = re.findall(r"\d{10}", file_text)
 
-        email = re.findall(
-            r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
-            file
-        )
+    name = "Not Found"
+    if "name" in file_lower:
+        name_part = re.split(r"(?i)name[:\s]*", file_text, maxsplit=1)
+        if len(name_part) > 1:
+            name = name_part[1].split("\n")[0].strip()
 
-        # ---------------- PHONE ----------------
+    skills = "Not Found"
+    if "skills" in file_lower:
+        skills_part = file_text.lower().split("skills", 1)[1]
+        if "education" in skills_part:
+            skills = skills_part.split("education", 1)[0].strip()
+        else:
+            skills = skills_part.strip()
 
-        phone = re.findall(r"\d{10}", file)
+    # st.subheader("Resume Information")
+    # st.info(f"👤 Name: {name}")
+    # st.info(f"📧 Email: {email[0] if email else 'Not Found'}")
+    # st.info(f"📱 Phone: {phone[0] if phone else 'Not Found'}")
+    # st.info(f"🛠 Skills: {skills}")
 
-        # ---------------- NAME ----------------
+    if not any(word in file_lower for word in resume_keywords):
+        st.error("This does not appear to be a resume. Please upload a valid resume PDF.")
+        st.stop()
 
-        name = "Not Found"
+elif parser_type == "Bank Statement Parser":
+    if not any(word in file_lower for word in bank_keywords):
+        st.error("This does not appear to be a bank statement. Please upload a valid bank statement PDF.")
+        st.stop()
+    st.success("✅ Bank Statement Parser selected.")
 
-        if "Name" in file:
-            name = file.split("Name")[1].split("\n")[0].strip()
+elif parser_type == "Invoice Parser":
+    if not any(word in file_lower for word in invoice_keywords):
+        st.error("This does not appear to be an invoice. Please upload a valid invoice PDF.")
+        st.stop()
+    st.success("✅ Invoice Parser selected.")
 
-        # ---------------- OUTPUT ----------------
+elif parser_type == "Normal PDF":
+    st.success("✅ Normal PDF selected.")
 
-        st.subheader("Extracted Information")
+    email = re.findall(
+        r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
+        file_text
+    )
+    phone = re.findall(r"\d{10}", file_text)
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.info(f" name : {name}")
+    name = "Not Found"
+    if "name" in file_lower:
+        name_part = re.split(r"(?i)name[:\s]*", file_text, maxsplit=1)
+        if len(name_part) > 1:
+            name = name_part[1].split("\n")[0].strip()
 
-        with col2:
-            st.info(f"phone: {phone[0] if phone else 'not found'}")
+    st.subheader("Extracted Information")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.info(f"Name: {name}")
+    with col2:
+        st.info(f"Phone: {phone[0] if phone else 'Not Found'}")
 
-        st.info(f"email :{email[0] if email else 'not found'}")
-        data = {
-            "Name": name,
-            "Email": email[0] if email else "Not Found",
-            "Phone": phone[0] if phone else "Not Found"
-        }
-        skills ="not found"
-        if skills in file:
-            skills =file.split("skills")[1].split("Education")[0].strip()
-        
-        st.info(f"🛠 Skills : {skills}")
-        st.json(data)
+    st.info(f"Email: {email[0] if email else 'Not Found'}")
 
-        json_data = json.dumps(data, indent=4)
+    skills = "Not Found"
+    if "skills" in file_lower:
+        skills_part = file_lower.split("skills", 1)[1]
+        if "education" in skills_part:
+            skills = skills_part.split("education", 1)[0].strip()
+        else:
+            skills = skills_part.strip()
+    st.info(f"🛠 Skills: {skills}")
 
-        st.download_button(
-            label="Download json",
-            data=json_data,
-            file_name="parsed_data.json",
-            mime="application/json"
-        )
+    data = {
+        "Name": name,
+        "Email": email[0] if email else "Not Found",
+        "Phone": phone[0] if phone else "Not Found"
+    }
+    json_data = json.dumps(data, indent=4)
+    st.download_button(
+        label="Download JSON",
+        data=json_data,
+        file_name="parsed_data.json",
+        mime="application/json"
+    )
 
-st.sidebar.title("pdf parser")
-
+st.sidebar.title("PDF Parser")
 st.sidebar.info(
-    "upload any resume pdf and extraxt information automatically"
+    "Upload any PDF and extract useful text or parser-specific data automatically."
 )
